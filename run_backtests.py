@@ -167,7 +167,7 @@ def scan_momentum_capitulation_weights(returns):
         pair_returns,
         combined_returns,
         initial_capital=INITIAL_CAPITAL,
-        title="Momentum + Daily Capitulation Combined Portfolio",
+        title="Momentum + Daily  Capitulation Combined Portfolio",
     )
 
     return weight_df
