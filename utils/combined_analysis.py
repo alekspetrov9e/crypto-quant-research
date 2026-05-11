@@ -31,7 +31,12 @@ def analyze_combined_strategy(
     )
 
     metrics_df = pd.DataFrame([metrics])
-    metrics_df["weights"] = str(weights)
+    clean_weights = {
+        key: round(float(value), 4)
+        for key, value in weights.items()
+    }
+
+    metrics_df["weights"] = str(clean_weights)
 
     metrics_df.to_csv(
         output_dir / "best_combined_metrics.csv",
@@ -48,7 +53,15 @@ def analyze_combined_strategy(
         periods_per_year=periods_per_year,
     )
 
-    alpha_df = pd.DataFrame([alpha_report])
+    alpha_df = pd.DataFrame([{
+        "alpha_daily": alpha_report["alpha_daily"],
+        "alpha_annual": alpha_report["alpha_annual"],
+        "beta_vs_btc": alpha_report["beta"],
+        "r_squared": alpha_report["r_squared"],
+        "information_ratio": alpha_report["information_ratio"],
+        "alpha_t_stat": alpha_report["t_stat_alpha"],
+        "alpha_p_value": alpha_report["p_value_alpha"],
+    }])
 
     alpha_df.to_csv(
         output_dir / "best_combined_alpha_report.csv",
