@@ -86,7 +86,15 @@ def add_image(story, path, width=6.4 * inch):
     story.append(Spacer(1, 0.25 * inch))
 
 
-def add_csv_table(story, title, path, max_rows=None, drop_columns=None):
+def add_csv_table(
+    story,
+    title,
+    path,
+    max_rows=None,
+    drop_columns=None,
+    sort_by=None,
+    ascending=False,
+):
     path = Path(path)
 
     story.append(Paragraph(title, styles["Heading2"]))
@@ -97,10 +105,54 @@ def add_csv_table(story, title, path, max_rows=None, drop_columns=None):
         return
 
     df = pd.read_csv(path)
+
+    if sort_by is not None and sort_by in df.columns:
+        df = df.sort_values(sort_by, ascending=ascending)
+
     df = format_df(df, max_rows=max_rows, drop_columns=drop_columns)
 
     story.append(df_to_table(df))
     story.append(Spacer(1, 0.3 * inch))
+
+def add_markdown_bullets(story, bullets):
+    for bullet in bullets:
+        story.append(
+            Paragraph(
+                f"• {bullet}",
+                styles["BodyText"],
+            )
+        )
+        story.append(Spacer(1, 0.06 * inch))
+
+
+def add_robustness_interpretation(story):
+    story.append(Paragraph("Parameter Robustness Interpretation", styles["Heading2"]))
+
+    add_markdown_bullets(
+        story,
+        [
+            "The momentum strategy remains profitable across many nearby fast/slow moving-average settings.",
+            "The original 10/30/3 configuration is not an isolated lucky parameter choice.",
+            "Several alternative configurations, such as 15/30/5 and 10/50/2, also produce Sharpe ratios above 1.",
+            "The capitulation strategy is more sensitive to parameter choices, especially the volume-shock threshold.",
+            "Stricter volume confirmation generally improves capitulation performance and reduces drawdown.",
+        ],
+    )
+
+
+def add_regime_interpretation(story):
+    story.append(Paragraph("BTC Regime Analysis Interpretation", styles["Heading2"]))
+
+    add_markdown_bullets(
+        story,
+        [
+            "Momentum performs best during BTC bull regimes, where trend persistence is strongest.",
+            "Capitulation strategies are more defensive during BTC bear regimes.",
+            "BTC buy-and-hold suffers the largest drawdowns in bear regimes.",
+            "The selective capitulation strategy is the only tested strategy with positive Sharpe during BTC bear regimes.",
+            "This supports combining trend-following and capitulation/reversal signals because they behave differently across market regimes.",
+        ],
+    )
 
 
 def build_report():
@@ -238,6 +290,71 @@ def build_report():
 
     story.append(PageBreak())
 
+    story.append(Paragraph("Parameter Robustness", styles["Heading1"]))
+
+    story.append(
+        Paragraph(
+            "To reduce the risk of overfitting, the main strategy parameters were varied around the baseline values. "
+            "The goal was not to optimize parameters, but to verify whether the strategy remains profitable across "
+            "reasonable nearby configurations.",
+            styles["BodyText"],
+        )
+    )
+
+    story.append(Spacer(1, 0.2 * inch))
+
+    add_csv_table(
+        story,
+        "Momentum Parameter Robustness - Top 10 by Sharpe",
+        RESULTS_DIR / "robustness" / "momentum_parameter_robustness.csv",
+        max_rows=10,
+        drop_columns=["strategy"],
+        sort_by="sharpe",
+    )
+
+    add_csv_table(
+        story,
+        "Capitulation Parameter Robustness - Top 10 by Sharpe",
+        RESULTS_DIR / "robustness" / "capitulation_parameter_robustness.csv",
+        max_rows=10,
+        drop_columns=["strategy"],
+        sort_by="sharpe",
+    )
+
+    add_robustness_interpretation(story)
+
+    story.append(PageBreak())
+
+    story.append(Paragraph("BTC Regime Analysis", styles["Heading1"]))
+
+    story.append(
+        Paragraph(
+            "The strategies were also evaluated separately in BTC bull and bear regimes. "
+            "A BTC bull regime is defined as a positive rolling 30-day BTC return, while a BTC bear regime is defined "
+            "as a non-positive rolling 30-day BTC return.",
+            styles["BodyText"],
+        )
+    )
+
+    story.append(Spacer(1, 0.2 * inch))
+
+    add_csv_table(
+        story,
+        "BTC Regime Counts",
+        RESULTS_DIR / "regime_analysis" / "btc_regime_counts.csv",
+    )
+
+    add_csv_table(
+        story,
+        "BTC Regime Performance",
+        RESULTS_DIR / "regime_analysis" / "btc_regime_performance.csv",
+        drop_columns=["final_value"],
+    )
+
+    add_regime_interpretation(story)
+
+    story.append(PageBreak())
+
     add_csv_table(
         story,
         "Best Strategy Combinations",
@@ -288,13 +405,79 @@ def build_report():
 
     story.append(PageBreak())
 
+    story.append(Paragraph("Final Portfolio: Alpha Portfolio + BTC", styles["Heading1"]))
+
+    story.append(
+        Paragraph(
+            "After constructing the best alpha portfolio from momentum and capitulation signals, "
+            "I tested whether adding a small BTC buy-and-hold allocation could improve the overall "
+            "risk-adjusted return. Since the alpha portfolio had low beta to BTC, BTC exposure may "
+            "add a complementary return stream rather than simply duplicating the same risk.",
+            styles["BodyText"],
+        )
+    )
+
+    story.append(Spacer(1, 0.15 * inch))
+
+    story.append(
+        Paragraph(
+            "The best allocation found by the weight scan was 85% alpha portfolio and 15% BTC. "
+            "Because the alpha portfolio itself consists of 80% momentum and 20% daily capitulation, "
+            "the final effective allocation is approximately:",
+            styles["BodyText"],
+        )
+    )
+
+    story.append(Spacer(1, 0.1 * inch))
+
+    final_alloc = pd.DataFrame(
+        [
+            {"Component": "Momentum alpha", "Effective allocation": "68%"},
+            {"Component": "Daily capitulation alpha", "Effective allocation": "17%"},
+            {"Component": "BTC buy-and-hold", "Effective allocation": "15%"},
+        ]
+    )
+
+    story.append(df_to_table(final_alloc))
+    story.append(Spacer(1, 0.25 * inch))
+
+    add_csv_table(
+        story,
+        "Alpha Portfolio + BTC Best Mix",
+        RESULTS_DIR / "combined_plus_btc" / "best_combined_strategy_btc_mix.csv",
+    )
+
+    story.append(
+        Paragraph(
+            "The final portfolio achieved a Sharpe ratio of approximately 1.47, compared with about "
+            "1.33 for the alpha-only portfolio. This suggests that a small BTC allocation improved "
+            "portfolio-level diversification and risk-adjusted performance, despite BTC having much "
+            "larger drawdowns as a standalone investment.",
+            styles["BodyText"],
+        )
+    )
+
+    story.append(Spacer(1, 0.2 * inch))
+
+    story.append(Paragraph("Alpha Portfolio + BTC Equity Curve", styles["Heading2"]))
+
+    add_image(
+        story,
+        RESULTS_DIR / "combined_plus_btc" / "alpha_portfolio_btc_mix_equity_curve.png",
+    )
+
+    story.append(PageBreak())
+
     story.append(Paragraph("Key Findings", styles["Heading2"]))
     story.append(
         Paragraph(
-            "The momentum strategy delivered the strongest standalone performance, while "
-            "the capitulation strategy showed materially lower correlation to momentum. "
-            "Combining the two improved the portfolio Sharpe ratio and reduced drawdown "
-            "relative to the standalone momentum strategy.",
+            "The dynamic momentum strategy delivered the strongest standalone performance, while "
+            "the daily capitulation strategy provided a lower-correlation return stream. Combining "
+            "80% momentum and 20% daily capitulation improved portfolio Sharpe and reduced drawdown "
+            "relative to standalone momentum. A final overlay that allocated 85% to this alpha portfolio "
+            "and 15% to BTC further improved Sharpe to approximately 1.47. The resulting effective "
+            "portfolio allocation was approximately 68% momentum alpha, 17% capitulation alpha, and "
+            "15% BTC buy-and-hold.",
             styles["BodyText"],
         )
     )

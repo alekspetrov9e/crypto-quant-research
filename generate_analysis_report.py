@@ -114,6 +114,8 @@ def analyze_standalone_strategies(results):
         initial_capital=INITIAL_CAPITAL,
     )
 
+    returns.to_csv(RESULTS_DIR / "strategy_returns.csv")
+
     summary.to_csv(RESULTS_DIR / "summary_metrics.csv", index=False)
     correlations.to_csv(RESULTS_DIR / "correlations.csv")
 
