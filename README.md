@@ -13,7 +13,7 @@ The project includes:
 - BTC regime analysis
 - Automated visualization and PDF report generation
 
-The goal of the project is not only to build profitable strategies, but also to evaluate them professionally through robustness tests, benchmarking, diversification analysis, and portfolio construction.
+The goal of the project is not only to develop profitable systematic strategies, but also to evaluate them professionally through robustness tests, benchmarking, diversification analysis, and portfolio construction.
 
 ---
 
@@ -28,6 +28,58 @@ This repository explores several research questions:
 5. How do the strategies behave in BTC bull and bear regimes?
 6. Can combining multiple low-correlation strategies improve Sharpe ratio?
 7. Does adding BTC exposure improve the final portfolio?
+
+---
+
+# Key Research Findings
+
+Main findings from the research:
+
+- Cross-sectional momentum showed strong persistent alpha in crypto markets
+- Breadth-adjusted exposure reduced drawdowns during weaker market participation
+- Capitulation reversal signals provided diversification against momentum crashes
+- Combining low-correlation alpha streams improved Sharpe ratio significantly
+- Adding partial BTC exposure further improved portfolio efficiency
+- Strategies remained profitable across many nearby parameter choices
+- Momentum and reversal signals behaved differently across BTC market regimes
+
+Final portfolio result:
+
+```text
+68% Momentum
+17% Capitulation
+15% BTC
+```
+
+Achieved approximately:
+
+```text
+Sharpe Ratio ≈ 1.47
+```
+---
+
+# Example outputs
+## Final Portfolio vs BTC
+
+![Final Portfolio vs BTC](assets/alpha_portfolio_plus_btc.png)
+
+---
+
+## Strategy Correlation Heatmap
+
+![Correlation Heatmap](assets/correlation_heatmap.png)
+
+---
+
+## Weight Scan for Strategy Combination to optimize Sharpe
+
+![Momentum Robustness](assets/weight_scan.png)
+
+---
+
+## Example Research Report Page
+
+![Research Report Preview](assets/example_report_preview.png)
 
 ---
 
@@ -119,6 +171,81 @@ Designed to:
 - Avoid weaker reversals
 - Improve behavior during BTC bear regimes
 
+# Dynamic Liquidity Universe
+
+All final strategies use a shared dynamic liquidity universe.
+
+Instead of trading a fixed subset of assets at every rebalance, each strategy starts from a broader candidate universe of crypto pairs and selects the most liquid assets at that point in time.
+
+At each rebalance, the strategy computes dollar volume for every candidate asset:
+
+```text
+dollar_volume = close_price × traded_volume
+```
+
+It then ranks all candidate assets by their average dollar volume over a rolling window:
+
+```text
+liquidity_window = 20 days
+```
+
+Only the top assets are kept for signal generation and portfolio construction:
+
+```text
+n_liquid = 20
+```
+
+This means the tradable universe is updated dynamically through time using only information available up to the current rebalance date.
+
+## Why this matters
+
+Dynamic liquidity filtering helps make the backtests more realistic because it:
+
+- avoids trading very illiquid assets
+- reduces unrealistic execution assumptions
+- adapts the tradable universe over time
+- focuses signals on assets where trading would be more practical
+- prevents the strategies from relying on stale or low-quality markets
+
+## Shared implementation
+
+The shared liquidity logic is implemented in:
+
+```text
+strategies/base_crypto_strategy.py
+```
+
+The final strategy classes inherit from `BaseCryptoStrategy`, which provides reusable infrastructure for:
+
+- common candidate universe definition
+- dynamic liquidity filtering
+- empty target construction
+- sell-first / buy-second target rebalancing
+
+This keeps the individual strategy files focused on their actual alpha logic instead of duplicating portfolio infrastructure code.
+
+## Candidate universe
+
+The broad candidate universe currently consists of major liquid crypto pairs such as:
+
+```text
+BTC/USD, ETH/USD, SOL/USD, BNB/USD, XRP/USD,
+AVAX/USD, LINK/USD, ADA/USD, DOGE/USD, LTC/USD,
+DOT/USD, TRX/USD, ETC/USD, ATOM/USD, FIL/USD,
+NEAR/USD, APT/USD, ARB/USD, OP/USD, SUI/USD,
+INJ/USD, UNI/USD, AAVE/USD, XLM/USD, RUNE/USD,
+SEI/USD, TIA/USD, PEPE/USD, SHIB/USD, FET/USD
+```
+
+At each rebalance, only the top 20 by recent average dollar volume are used.
+
+## Look-ahead safety
+
+The liquidity universe is computed from historical bars available at the rebalance point.  
+The strategy does not use future volume or price information to decide which assets are tradable.
+
+This is important because liquidity filtering itself can otherwise introduce look-ahead bias if the universe is selected using future information.
+
 # Additional Experimental Strategies
 
 The `strategies/` folder also contains several additional experimental strategy implementations that were explored during the research process.
@@ -156,6 +283,7 @@ Only strategies that demonstrated:
 - statistically meaningful alpha characteristics
 
 were retained for the final analysis and portfolio construction.
+
 ---
 
 # Portfolio Construction
@@ -254,6 +382,80 @@ Results:
 - Diversified return streams
 - Low BTC beta
 - Improved stability during large BTC market swings
+
+---
+
+# Backtesting Assumptions
+
+The backtests attempt to use realistic execution assumptions.
+
+## Trading Costs
+
+All strategies include transaction costs and slippage:
+
+```python
+TAKER_FEE = 0.0026
+MAKER_FEE = 0.0016
+SLIP = 0.001
+```
+
+Approximate assumptions:
+
+| Component | Assumption |
+|---|---|
+| Taker fee | 0.26% |
+| Maker fee | 0.16% |
+| Slippage | 0.10% |
+
+These assumptions are intentionally conservative for crypto markets.
+
+## Backtest Configuration
+
+The primary research backtests use:
+
+| Parameter | Value |
+|---|---|
+| Initial capital | $1,000 |
+| Start date | 2021-01-01 |
+| Frequency | Daily (`1d`) |
+| Portfolio type | Long-only |
+| Rebalancing | Daily |
+
+The start date was chosen to include multiple distinct crypto market environments, including:
+
+- strong BTC bull markets
+- high-volatility transition periods
+- prolonged BTC bear regimes
+
+This allows the strategies to be evaluated across different market conditions rather than only a single favorable environment.
+
+---
+
+## Execution Assumptions
+
+The backtests assume:
+
+- daily rebalance frequency
+- long-only portfolios
+- no leverage
+- no short-selling
+- fractional position sizing
+- immediate execution at rebalance
+- historical liquidity filtering
+- no look-ahead information
+
+---
+
+## Universe Construction
+
+The tradable universe is dynamically recomputed at each rebalance using only historical information available at that time.
+
+This helps reduce:
+
+- survivorship bias
+- stale universe effects
+- unrealistic liquidity assumptions
+- look-ahead bias
 
 ---
 
@@ -636,7 +838,29 @@ automated research reporting
 
 This makes the repository function not only as a collection of strategies, but as a reusable quantitative research framework.
 
+# Data
+
+Historical market data was obtained through the `twsq` framework using crypto exchange OHLCV data.
+
+The research primarily uses:
+
+- daily frequency data (`1d`)
+- USD-denominated crypto pairs
+- liquid large/mid-cap assets
+
+The backtests span multiple BTC market regimes, including both strong bull and bear periods.
+
 # Project Structure
+
+The repository is intentionally modular to separate:
+
+- strategy logic
+- evaluation
+- visualization
+- benchmarking
+- robustness analysis
+- portfolio construction
+- report generation
 
 ```text
 crypto-quant-research/
